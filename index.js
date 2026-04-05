@@ -9,11 +9,21 @@ const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
+// ================= INIT =================
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: false
+});
+
+console.log("ENV CHECK:", {
+  openai: process.env.OPENAI_API_KEY ? "OK" : "MISSING",
+  telegram: process.env.TELEGRAM_BOT_TOKEN ? "OK" : "MISSING",
+  chat: process.env.CHAT_ID ? "OK" : "MISSING"
+});
 
 // ================= GOOGLE SHEETS =================
 
@@ -69,36 +79,28 @@ async function updateRow(rowIndex, posts) {
     spreadsheetId: SPREADSHEET_ID,
     range: `'Аркуш1'!B${rowIndex}`,
     valueInputOption: 'RAW',
-    requestBody: {
-      values: [['done']]
-    }
+    requestBody: { values: [['done']] }
   });
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `'Аркуш1'!F${rowIndex}`,
     valueInputOption: 'RAW',
-    requestBody: {
-      values: [[preview]]
-    }
+    requestBody: { values: [[preview]] }
   });
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `'Аркуш1'!G${rowIndex}`,
     valueInputOption: 'RAW',
-    requestBody: {
-      values: [[new Date().toISOString()]]
-    }
+    requestBody: { values: [[new Date().toISOString()]] }
   });
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `'Аркуш1'!H${rowIndex}`,
     valueInputOption: 'RAW',
-    requestBody: {
-      values: [[posts]]
-    }
+    requestBody: { values: [[posts]] }
   });
 }
 
@@ -106,18 +108,14 @@ async function updateRow(rowIndex, posts) {
 
 async function generatePosts(data) {
   const prompt = `
-You are a social media content generator.
-
 Generate EXACTLY 3 posts.
-DO NOT ask questions.
-DO NOT stop early.
 
 Topic: ${data.topic}
 Platform: ${data.platform}
 Tone: ${data.tone}
 Type: ${data.type}
 
-STRICT FORMAT:
+FORMAT:
 
 POST 1:
 Hook:
@@ -126,16 +124,10 @@ CTA:
 Hashtags:
 
 POST 2:
-Hook:
-Content:
-CTA:
-Hashtags:
+...
 
 POST 3:
-Hook:
-Content:
-CTA:
-Hashtags:
+...
 `;
 
   const res = await openai.responses.create({
@@ -169,6 +161,24 @@ async function generateImage(data) {
   };
 }
 
+// ================= HELPERS =================
+
+async function sendToTelegram(posts, image) {
+  try {
+    if (image) {
+      await bot.sendPhoto(
+        process.env.CHAT_ID,
+        fs.createReadStream(image.localPath),
+        { caption: "🔥 AI Content Pack" }
+      );
+    }
+
+    await bot.sendMessage(process.env.CHAT_ID, posts);
+  } catch (e) {
+    console.error("TELEGRAM ERROR:", e.message);
+  }
+}
+
 // ================= RUN =================
 
 app.get('/run', async (req, res) => {
@@ -188,22 +198,13 @@ app.get('/run', async (req, res) => {
     const posts = await generatePosts(data);
     const image = await generateImage(data);
 
-    if (image) {
-      await bot.sendPhoto(
-        process.env.CHAT_ID,
-        fs.createReadStream(image.localPath),
-        { caption: "🔥 AI Content Pack" }
-      );
-    }
-
-    await bot.sendMessage(process.env.CHAT_ID, posts);
-
+    await sendToTelegram(posts, image);
     await updateRow(row.rowIndex, posts);
 
     res.send("Done");
 
   } catch (err) {
-    console.error(err);
+    console.error("RUN ERROR:", err);
     res.send("Error");
   }
 });
@@ -224,15 +225,7 @@ app.post('/generate', async (req, res) => {
     const posts = await generatePosts(data);
     const image = await generateImage(data);
 
-    if (image) {
-      await bot.sendPhoto(
-        process.env.CHAT_ID,
-        fs.createReadStream(image.localPath),
-        { caption: "🔥 AI Content Pack" }
-      );
-    }
-
-    await bot.sendMessage(process.env.CHAT_ID, posts);
+    await sendToTelegram(posts, image);
 
     res.json({
       result: posts,
@@ -240,7 +233,7 @@ app.post('/generate', async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("GENERATE ERROR:", err);
     res.status(500).send('Error');
   }
 });
