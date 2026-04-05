@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>AI Content Generator</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at top, #0f172a, #020617);
+      color: white;
+    }
+
+    .wrapper {
+      display: flex;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .card {
+      width: 700px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.6);
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.4);
+      color: white;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      font-weight: bold;
+      background: linear-gradient(135deg, #6366f1, #22c55e);
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+    }
+
+    button:disabled {
+      background: gray;
+      box-shadow: none;
+    }
+
+    .loading {
+      margin-top: 10px;
+      color: #38bdf8;
+    }
+
+    img {
+      width: 100%;
+      border-radius: 15px;
+      margin-top: 20px;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .posts {
+      margin-top: 20px;
+      display: grid;
+      gap: 15px;
+    }
+
+    .post-card {
+      background: rgba(0, 0, 0, 0.6);
+      padding: 20px;
+      border-radius: 12px;
+      position: relative;
+      animation: fadeIn 0.4s ease;
+      transition: 0.3s;
+    }
+
+    .post-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .post-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 4px;
+      width: 100%;
+      background: linear-gradient(90deg, #6366f1, #22c55e);
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #6366f1;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .copy-btn:hover {
+      background: #818cf8;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .highlight {
+      color: #22c55e;
+      font-weight: bold;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <div class="wrapper">
+    <div class="card">
+
+      <h1>🚀 AI Content Generator</h1>
+
+      <input id="topic" placeholder="Topic">
+      <input id="platform" placeholder="Platform">
+      <input id="tone" placeholder="Tone">
+      <input id="type" placeholder="Type">
+
+      <button id="btn" onclick="generate()">Generate Content</button>
+
+      <div class="loading" id="loading"></div>
+
+      <div id="imageBox"></div>
+
+      <div class="posts" id="posts"></div>
+
+    </div>
+  </div>
+
+  <script>
+    async function generate() {
+      const btn = document.getElementById('btn');
+      const loading = document.getElementById('loading');
+      const postsBox = document.getElementById('posts');
+      const imageBox = document.getElementById('imageBox');
+
+      btn.disabled = true;
+      loading.innerText = "⏳ Generating...";
+      postsBox.innerHTML = "";
+      imageBox.innerHTML = "";
+
+      try {
+        const res = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: document.getElementById('topic').value,
+            platform: document.getElementById('platform').value,
+            tone: document.getElementById('tone').value,
+            type: document.getElementById('type').value
+          })
+        });
+
+        const data = await res.json();
+
+        // 🔥 IMAGE
+        if (data.image) {
+          imageBox.innerHTML = `
+            <img src="${data.image}?t=${Date.now()}" />
+          `;
+        }
+
+        // 🔥 POSTS
+        const posts = data.result.split('POST').slice(1);
+
+        posts.forEach((p, index) => {
+          const div = document.createElement('div');
+          div.className = 'post-card';
+
+          let text = "POST " + (index + 1) + ":" + p;
+
+          text = text
+            .replace(/Hook:/g, "<span class='highlight'>Hook:</span>")
+            .replace(/Content:/g, "<span class='highlight'>Content:</span>")
+            .replace(/CTA:/g, "<span class='highlight'>CTA:</span>")
+            .replace(/Hashtags:/g, "<span class='highlight'>Hashtags:</span>");
+
+          div.innerHTML = `
+            <button class="copy-btn" onclick="copyText(this)">Copy</button>
+            <pre>${text}</pre>
+          `;
+
+          postsBox.appendChild(div);
+        });
+
+      } catch (e) {
+        postsBox.innerText = "❌ Error...";
+      }
+
+      loading.innerText = "";
+      btn.disabled = false;
+    }
+
+    function copyText(btn) {
+      const text = btn.parentElement.innerText.replace("Copy", "");
+      navigator.clipboard.writeText(text);
+      btn.innerText = "Copied!";
+      setTimeout(() => btn.innerText = "Copy", 1000);
+    }
+  </script>
+
+</body>
+
+</html>
